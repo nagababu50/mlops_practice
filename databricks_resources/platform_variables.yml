@@ -1,0 +1,57 @@
+variables:
+# =================================
+# DO NOT CHANGE THIS FILE
+# ANY CUSTOMIZED OR NEW VARAIBLES 
+# SHOULD BE IN PROJECT_VARIABLES.YML
+# ==================================
+  project_name:
+    default: gcp_demo
+  team_name: 
+    default: mlplatform
+  init_script_path:
+    description: Databricks Init script path
+  wheel_file_path:
+    description: Databricks Init script path
+  git_branch:
+    description: Github Branch
+  git_tag:
+    description: Github Branch
+  data_science_dev_group:
+    default: Azure-AIML-mlplatform
+  mlops_dev_group:
+    default: Azure-AIML-mlplatform
+  compute_policy_id:
+    description: compute policy id
+  environment:
+    description: Environment
+  log_level:
+    description: log level
+    default: CRITICAL
+  pause_status:
+    description: Job status when deployed
+    default: PAUSED    
+  libraries: 
+    description: libraries
+    type: complex
+    default: 
+      - whl: ${var.wheel_file_path}
+  git_source:
+    type: complex
+    default:
+      git_url: ${bundle.git.origin_url}
+      git_provider: gitHubEnterprise
+      git_branch: ${var.git_branch}
+  job_configs: # uses other configs as components
+    description: reusable configurations for all jobs in bundle
+    type: complex
+    default:
+      email_notifications:
+        no_alert_for_skipped_runs: true
+      notification_settings:
+        no_alert_for_canceled_runs: true
+        no_alert_for_skipped_runs: true
+      permissions:
+        - group_name: ${var.data_science_dev_group} 
+          level: CAN_MANAGE
+        - group_name: ${var.mlops_dev_group} # provide the correct group name
+          level: CAN_MANAGE

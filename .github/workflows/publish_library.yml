@@ -1,0 +1,69 @@
+name: Publish Library
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'environment to deploy to'
+        required: true
+        default: 'stage'
+        type: choice
+        options:
+          - stage
+          - prod
+jobs: 
+
+  set_vars:
+    uses: GapInc-AIML/common_workflows/.github/workflows/set_varsv2.yml@v1.0.0
+    with:
+      team: mlplatform
+      deploy-environment: ${{ inputs.environment }}
+    secrets: inherit
+  precheck:  
+    uses: GapInc-AIML/common_workflows/.github/workflows/precheckv2.yml@v1.0.0
+    needs: set_vars
+    with:
+      deployment_type: ${{ needs.set_vars.outputs.deploy-environment }}
+      check_versions_only: true
+    secrets: inherit
+  checks:
+    uses: GapInc-AIML/common_workflows/.github/workflows/checks.yml@v1.0.0
+    needs: set_vars
+    secrets: inherit
+  create-tag-and-release-from-stage-short-sha:
+    uses: GapInc-AIML/common_workflows/.github/workflows/tag_releasev2.yml@v1.0.0
+    needs: [set_vars,checks,precheck]
+    with:
+      tag: ${{ needs.set_vars.outputs.release-tag }}
+      release-title: ${{ needs.set_vars.outputs.release-title }}
+      short_sha: ${{ needs.set_vars.outputs.short_sha }}
+      deployment_type: ${{ needs.set_vars.outputs.deploy-environment }}
+    secrets: inherit
+  build:
+    uses: GapInc-AIML/common_workflows/.github/workflows/buildv2.yml@v1.0.0
+    needs: [set_vars,create-tag-and-release-from-stage-short-sha]
+    with:
+      deploy-environment: ${{ needs.set_vars.outputs.deploy-environment }}
+    secrets: inherit
+
+  fetch_metadata:
+    uses: GapInc-AIML/common_workflows/.github/workflows/fetch_metadata.yml@v1.0.0
+    needs: [set_vars,checks]
+    if: |
+      always() && 
+      !cancelled() &&
+      (needs.set_vars.result == 'success') &&
+      (needs.checks.result == 'success' || needs.checks.result == 'skipped')
+    with:
+      disable_unit_test_flag: ${{ needs.set_vars.outputs.disable_unit_test_flag == 'true' }}
+      disable_format_flag: ${{ needs.set_vars.outputs.disable_format_flag == 'true' }}
+      disable_lint_flag: ${{ needs.set_vars.outputs.disable_lint_flag == 'true' }}
+      deploy-environment: ${{ needs.set_vars.outputs.deploy-environment || 'dev' }}
+      project_name: 'N/A'
+      release-tag: ${{ needs.set_vars.outputs.release-tag || 'N/A' }}
+      branch_name: ${{ needs.set_vars.outputs.branch_name || 'N/A' }}
+      databricks_summary: 'N/A'
+      disable_sonarqube: ${{ needs.set_vars.outputs.disable_sonarqube == 'true' }}
+      team: ${{ needs.set_vars.outputs.team || 'mlplatform' }}
+      test_coverage: ${{ (needs.checks.result == 'success' && needs.checks.outputs.test_coverage) || 0 }}
+    secrets: inherit  

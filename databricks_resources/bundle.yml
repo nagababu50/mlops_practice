@@ -1,0 +1,98 @@
+# yaml-language-server: $schema=bundle_config_schema.json
+bundle:
+  name: ${var.project_name}-${var.git_branch}
+  git:
+    origin_url: https://github.gapinc.com/GapInc-AIML/gcp_demo.git
+include:
+  - ./*.yml
+
+targets:
+  dev:
+    mode: development
+    presets:
+      trigger_pause_status: PAUSED 
+      tags:
+        project: ${var.project_name}
+        team: ${var.team_name}
+    default: true
+    workspace:
+      host: https://adb-6119190421902441.1.azuredatabricks.net/ #dna dev workspace
+    permissions:
+    - level: CAN_MANAGE
+      group_name: ${var.mlops_dev_group} 
+    - level: CAN_MANAGE
+      group_name: ${var.data_science_dev_group}
+    - level: CAN_VIEW
+      group_name: Azure-aiml-all
+    variables:
+      compute_policy_id: 00027A1DFD03CA8A # provide correct dev policy_id
+      environment: dev
+      log_level: INFO
+      pause_status: PAUSED
+  stage:
+    mode: development
+    presets:
+      trigger_pause_status: PAUSED 
+      tags:
+        project: ${var.project_name}
+        team: ${var.team_name}
+    workspace:
+      host: https://adb-439166735280227.7.azuredatabricks.net/ #dna stage workspace
+    permissions:
+    - level: CAN_MANAGE
+      group_name: ${var.mlops_dev_group} 
+    - level: CAN_MANAGE
+      group_name: ${var.data_science_dev_group}
+    - level: CAN_VIEW
+      group_name: Azure-aiml-all
+    variables:
+      compute_policy_id: 0006BF870B281315 # provide correct dev policy_id
+      environment: stage
+      pause_status: PAUSED
+      git_source:
+        git_url: ${bundle.git.origin_url}
+        git_provider: gitHubEnterprise
+        git_tag: ${var.git_tag}
+  prod:
+    presets:
+      trigger_pause_status: UNPAUSED 
+      tags:
+        project: ${var.project_name}
+        team: ${var.team_name}
+    workspace:
+      host: https://adb-4378872364156738.18.azuredatabricks.net/ # Entana Prod 02 workspace
+    permissions:
+    - level: CAN_MANAGE
+      group_name: Azure-AZ-Admins-AIML-mlplatform
+    - level: CAN_MANAGE
+      group_name: Azure-AZ-Admins-AIML-mlplatform
+    - level: CAN_MANAGE
+      group_name: Azure-AZ-Admins-AIML-mlservices
+    - level: CAN_VIEW
+      group_name: Azure-aiml-all
+    variables:
+      compute_policy_id: 0019FD7265511A47 # provide correct prod policy_id
+      environment: prod
+      pause_status: UNPAUSED
+      git_source:
+        git_url: ${bundle.git.origin_url}
+        git_provider: gitHubEnterprise
+        git_tag: ${var.git_tag}
+      job_configs: # uses other configs as components
+        description: reusable configurations for all jobs in bundle
+        type: complex
+        default:
+          email_notifications:
+            no_alert_for_skipped_runs: true
+            on_failure:
+            - PT-AIML-mlplatform-ALERT-DG@gap.com
+            - PT-AIML-mlplatform-ALERT-DG@gap.com
+            - aiml-mlplatform-alerting@gapinc.pagerduty.com
+          notification_settings:
+            no_alert_for_canceled_runs: true
+            no_alert_for_skipped_runs: true
+          permissions:
+            - group_name: Azure-AZ-Admins-AIML-mlplatform
+              level: CAN_MANAGE
+            - group_name: Azure-AZ-Admins-AIML-mlplatform
+              level: CAN_MANAGE

@@ -1,0 +1,47 @@
+spark_env_vars: &spark_env_vars
+  spark_env_vars:
+    ARTIFACTORY_USERNAME: "{{secrets/jfrog/JF_USER}}"
+    ARTIFACTORY_PASSWORD: "{{secrets/jfrog/JF_PAT}}"
+    ARTIFACTORY_REPO: "{{secrets/jfrog/JF_REPO}}"
+    ENVIRONMENT: ${var.environment}
+    PACKAGE_NAME: ${var.project_name}
+    TEAM: ${var.team_name}
+    BRANCH_NAME: ${var.git_branch}  
+    PIP_INDEX_URL: "{{secrets/jfrog/PIP_INDEX_URL}}"
+    CLICK_STANDALONE_MODE: "false"
+    LOG_LEVEL: ${var.log_level}
+
+
+default_cluster_configs: &default_cluster_configs
+  <<: *spark_env_vars
+  cluster_name: ""
+  spark_version: ${var.spark_version}
+  azure_attributes:
+    first_on_demand: 1
+    availability: ON_DEMAND_AZURE
+    spot_bid_max_price: 100
+  node_type_id: ${var.node_type_id}
+  driver_node_type_id: ${var.driver_node_type_id}
+  enable_elastic_disk: true
+  init_scripts:
+    - volumes:
+        destination: ${var.init_script_path}
+  policy_id: ${var.compute_policy_id}
+  custom_tags:
+    project: ${var.project_name}
+    team: ${var.team_name}
+  data_security_mode: SINGLE_USER
+  runtime_engine: STANDARD
+  cluster_log_conf:
+    dbfs:
+      destination: dbfs:/cluster-logs
+  autoscale:
+    min_workers: 1
+    max_workers: 8
+variables:
+  cluster_configs:
+    description: desc
+    type: complex
+    default:
+      compute_cluster_config:
+        <<: *default_cluster_configs

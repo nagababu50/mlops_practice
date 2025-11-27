@@ -1,0 +1,415 @@
+name: Stage & Prod Release # the name of the workflow
+run-name: "[${{inputs.environment}} | ${{ inputs.action}}] by @${{github.actor}}"
+
+# this section defines when the workflow should run
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Choose Deployment Environment"
+        type: choice
+        required: true
+        options:
+          - stage
+          - prod
+      action:
+        description: "Choose action"
+        type: choice
+        required: true
+        options:
+          - flip
+          - swap
+          - kill
+          - deploy_dormant
+          - regular
+          - kill_dormant
+        default: regular
+      debug_mode:
+        description: "debug_mode"
+        type: choice
+        required: false
+        options:
+          - "true"
+          - "false"
+        default: "false"
+     
+
+jobs:
+  set_vars:
+      uses: GapInc-AIML/common_workflows/.github/workflows/set_varsv2.yml@v1.0.0
+      with:
+        team: mlplatform   ###Set team name mlplatform
+        deploy-environment: ${{ inputs.environment }}
+      secrets: inherit
+
+  normalize_vars:
+    needs: [set_vars]
+    runs-on: [self-hosted]
+    outputs:
+      project-name: ${{ steps.normalize.outputs.project-name }}
+      branch-name: ${{ steps.normalize.outputs.branch-name }}
+      short-sha: ${{ steps.normalize.outputs.short-sha }}
+      release-tag: ${{ steps.normalize.outputs.release-tag }}
+      action: ${{steps.action.outputs.action}}
+            
+    steps:
+      - name: setup_action
+        id: action
+        run: |
+          
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            if [[ "${{ github.event.action }}" == "opened" ]]; then
+              echo "action=regular" >> $GITHUB_OUTPUT
+            elif [[ "${{ github.event.action }}" == "closed" ]]; then
+              echo "action=kill" >> $GITHUB_OUTPUT
+            else
+              echo "action=regular" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "action=${{ inputs.action }}" >> $GITHUB_OUTPUT
+          fi
+          
+
+      - name: Normalize variables
+        id: normalize
+        run: |
+          # Normalize project-name by replacing spaces and underscores with dashes
+          PROJECT_NAME="${{ needs.set_vars.outputs.project-name }}"
+          NORMALIZED_PROJECT_NAME=$(echo "$PROJECT_NAME" | sed 's/[_ ]/-/g' | tr '[:upper:]' '[:lower:]')
+          echo "Original project-name: $PROJECT_NAME"
+          echo "Normalized project-name: $NORMALIZED_PROJECT_NAME"
+          echo "project-name=$NORMALIZED_PROJECT_NAME" >> $GITHUB_OUTPUT
+                
+          # Normalize branch name by replacing spaces and underscores with dashes
+          BRANCH_NAME="${{ needs.set_vars.outputs.branch_name }}"
+          NORMALIZED_BRANCH_NAME=$(echo "$BRANCH_NAME" | sed 's/[_ ]/-/g' | tr '[:upper:]' '[:lower:]')
+          echo "Original branch-name: $BRANCH_NAME"
+          echo "Normalized branch-name: $NORMALIZED_BRANCH_NAME"
+          echo "branch-name=$NORMALIZED_BRANCH_NAME" >> $GITHUB_OUTPUT
+                
+          # Pass through other variables unchanged
+          echo "short-sha=${{ needs.set_vars.outputs.short_sha }}" >> $GITHUB_OUTPUT
+          echo "release-tag=${{ needs.set_vars.outputs.release-tag }}" >> $GITHUB_OUTPUT
+                
+          echo "Final normalized values:"
+          echo "  project-name: $NORMALIZED_PROJECT_NAME"
+          echo "  branch-name: $NORMALIZED_BRANCH_NAME"
+          echo "  short-sha: ${{ needs.set_vars.outputs.short_sha }}"
+          echo "  release-tag: ${{ needs.set_vars.outputs.release-tag }}"
+          echo "  action: ${{ steps.action.outputs.action }}"
+
+  precheck:
+    if: ${{ inputs.action != 'kill' }}  
+    uses: GapInc-AIML/common_workflows/.github/workflows/precheckv2.yml@v1.0.0
+    needs: [set_vars,normalize_vars]
+    with:
+      deployment_type: ${{ needs.set_vars.outputs.deploy-environment }}
+      check_versions_only: true
+    secrets: inherit
+
+  checks:
+    if: ${{ inputs.action != 'kill' }}
+    uses: GapInc-AIML/common_workflows/.github/workflows/checks.yml@v1.0.0
+    needs: [set_vars,normalize_vars]
+    with:
+      disable_format_flag: ${{ needs.set_vars.outputs.disable_format_flag }}
+      disable_lint_flag: ${{ needs.set_vars.outputs.disable_lint_flag }}
+      disable_unit_test_flag: ${{ needs.set_vars.outputs.disable_unit_test_flag }}
+      disable_sonarqube: ${{ needs.set_vars.outputs.disable_sonarqube }}
+    secrets: inherit
+
+  create-tag-and-release-from-stage-short-sha:
+    if: ${{ inputs.action != 'kill' }}
+    uses: GapInc-AIML/common_workflows/.github/workflows/tag_releasev2.yml@v1.0.0
+    needs: [set_vars,checks,precheck,normalize_vars]
+    with:
+      tag: ${{ needs.set_vars.outputs.release-tag }}
+      release-title: ${{ needs.set_vars.outputs.release-title }}
+      short_sha: ${{ needs.set_vars.outputs.short_sha }}
+      deployment_type: ${{ needs.set_vars.outputs.deploy-environment }}
+    secrets: inherit
+
+  check_databricks_resources:
+    needs: [create-tag-and-release-from-stage-short-sha]
+    runs-on: [self-hosted]
+    outputs:
+      has_databricks: ${{ steps.check.outputs.has_databricks }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for databricks_resources folder
+        id: check
+        run: |
+          if find . -name "databricks_resources" | grep -q .; then
+            echo "has_databricks=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_databricks=false" >> $GITHUB_OUTPUT
+          fi
+
+  check_aks_resources:
+    needs: [create-tag-and-release-from-stage-short-sha]
+    runs-on: [self-hosted]
+    outputs:
+      has_aks: ${{ steps.check.outputs.has_aks }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for aks_resources folder
+        id: check
+        run: |
+          if find . -name "aks_resources" | grep -q .; then
+            echo "has_aks=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_aks=false" >> $GITHUB_OUTPUT
+          fi    
+ 
+
+  build:
+    if: ${{ needs.check_databricks_resources.outputs.has_databricks == 'true' }}
+    uses: GapInc-AIML/common_workflows/.github/workflows/buildv3.yml@v1.0.0
+    needs: [check_databricks_resources,set_vars]
+    with:
+      deploy-environment: ${{ needs.set_vars.outputs.deploy-environment }}
+    secrets: inherit
+
+  deploy:
+    uses: GapInc-AIML/common_workflows/.github/workflows/deployv3.yml@v1.0.0
+    needs: [build,set_vars]  
+    if : ${{ always() && needs.build.result == 'success' && (github.event.action != 'closed' || github.event.pull_request.merged == true) }}
+    with:
+      deploy-environment: ${{ needs.set_vars.outputs.deploy-environment }}
+      team: ${{ needs.set_vars.outputs.team }}
+      package_name: gcp_demo
+      release-tag: ${{ needs.set_vars.outputs.release-tag }}
+      prod-precheck: true
+      branch_name: ${{ needs.set_vars.outputs.branch_name }}
+    secrets: inherit
+  
+  fetch_metadata:
+    uses: GapInc-AIML/common_workflows/.github/workflows/fetch_metadata.yml@v1.0.0
+    needs: [set_vars,checks,normalize_vars,deploy,build_scan_push_deploy_stage,build_scan_push_deploy_prod]
+    if: |
+      always() && 
+      !cancelled() &&
+      (needs.set_vars.result == 'success') &&
+      (needs.normalize_vars.result == 'success')
+    with:
+      disable_unit_test_flag: ${{ needs.set_vars.outputs.disable_unit_test_flag == 'true' }}
+      disable_format_flag: ${{ needs.set_vars.outputs.disable_format_flag == 'true' }}
+      disable_lint_flag: ${{ needs.set_vars.outputs.disable_lint_flag == 'true' }}
+      deploy-environment: ${{ needs.set_vars.outputs.deploy-environment || 'dev' }}
+      project_name: ${{ needs.normalize_vars.outputs.project-name || 'unknown' }}
+      release-tag: ${{ needs.set_vars.outputs.release-tag || 'unknown' }}
+      branch_name: ${{ needs.set_vars.outputs.branch_name || 'unknown' }}
+      databricks_summary: ${{ (needs.deploy.result == 'success' && needs.deploy.outputs.databricks_summary) || 'N/A' }}
+      disable_sonarqube: ${{ needs.set_vars.outputs.disable_sonarqube == 'true' }}
+      team: ${{ needs.set_vars.outputs.team || 'unknown' }}
+      test_coverage: ${{ (needs.checks.result == 'success' && needs.checks.outputs.test_coverage) || 0 }}
+    secrets: inherit
+
+  update_chartis_file: # make it project name
+    if: | 
+      needs.check_aks_resources.outputs.has_aks == 'true'
+    needs: [normalize_vars,set_vars,check_aks_resources]
+    runs-on: [self-hosted]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Update chartis file with the appname, tag and docker image
+        env:
+          ARTIFACTORY_USERNAME: ${{ secrets.JFROG_USERNAME }}
+          ARTIFACTORY_PASSWORD: ${{ secrets.JFROG_PASSWORD }}
+          PROJECT_NAME: ${{ needs.normalize_vars.outputs.project-name }}
+          BRANCH_NAME: ${{ needs.set_vars.outputs.branch_name }}
+          SHORT_SHA: ${{ needs.set_vars.outputs.short_sha }}
+          ACTION: ${{ needs.normalize_vars.outputs.action }}
+        run: |
+
+          cat <<EOF > dynamic.yml
+            default:
+              appName: ${PROJECT_NAME}-${{ needs.normalize_vars.outputs.branch-name }}
+              environment:  ${{ inputs.environment }}
+              kubernetes:
+                dockerImageTag: ${SHORT_SHA}
+                dockerImage: ${PROJECT_NAME}
+              environmentVariables:
+                BRANCH_NAME: ${BRANCH_NAME}
+          EOF
+        
+          pip install 'deploykit' --extra-index-url https://${ARTIFACTORY_USERNAME}:${ARTIFACTORY_PASSWORD}@gapinc.jfrog.io/artifactory/api/pypi/enterprise-mlops-pypi-prod/simple -v --no-input
+          python -m deploykit.aks_deployment.chartis_generator aks-deployment \
+            -s ${{ needs.normalize_vars.outputs.action }} \
+            -e ${{ inputs.environment }} \
+            --configurations "aks_resources/chartis/deploy.yml,aks_resources/chartis/variables.yml,dynamic.yml" \
+            -o "aks_resources/chartis/deploy.yml"
+
+      - name: Commit and push chartis file changes
+        env:
+          branch: ${{ needs.normalize_vars.outputs.branch-name }}
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add aks_resources/chartis/
+          git commit -m "Update chartis file with app: ${{ needs.normalize_vars.outputs.project-name }}-${{ needs.normalize_vars.outputs.branch-name }}, tag: ${{ needs.set_vars.outputs.release-tag }}" || exit 0
+          git push --force origin HEAD:donotuse
+  run_aks_checks:
+    if: | 
+      needs.check_aks_resources.outputs.has_aks == 'true'
+    needs: [normalize_vars,set_vars,check_aks_resources,update_chartis_file]
+    uses:  GapInc-AIML/common_workflows/.github/workflows/aks_checks.yml@GEN-7483
+    with:
+      environment: 'dev'
+      branch: ${{ needs.normalize_vars.outputs.branch-name }}
+    secrets: inherit
+  build_scan_push_deploy_debug:
+      needs: [ set_vars,normalize_vars,update_chartis_file ]
+      runs-on: [self-hosted]
+      steps:
+          - name: Debug - Print all inputs
+            run: |
+              echo "=== DEBUG: All inputs for build_scan_push_deploy ==="
+              echo "env: ${{ inputs.environment }}"
+              echo "image-name: ${{ needs.normalize_vars.outputs.project-name }}"
+              echo "chartis-location: aks_resources/chartis"
+              echo "docker-context: ."
+              echo "dockerfile-location: Dockerfile"
+              echo "ignore-existing-image-error: true"
+              echo "service-account-name: s-pt-entanaly"
+              echo "token-name: S_PT_ENTANALY_TOKEN"
+              echo "promote-to-prod: false"
+              echo "image-tag: ${{ needs.set_vars.outputs.short_sha }}"
+              echo ""
+              echo "=== DEBUG: Related variables ==="
+              echo "inputs.action: ${{ inputs.action }}"
+              echo "inputs.debug_mode: ${{ inputs.debug_mode }}"
+              echo "needs.set_vars.outputs.project-name: ${{ needs.set_vars.outputs.project-name }}"
+              echo "needs.set_vars.outputs.short_sha: ${{ needs.set_vars.outputs.short_sha }}"
+              echo "needs.set_vars.outputs.release-tag: ${{ needs.set_vars.outputs.release-tag }}"
+              echo "needs.normalize_vars.outputs.project-name: ${{ needs.normalize_vars.outputs.project-name }}"
+              echo "needs.normalize_vars.outputs.branch-name: ${{ needs.normalize_vars.outputs.branch-name }}"
+              echo "github.head_ref: ${{ github.head_ref }}"
+              echo "github.ref_name: ${{ github.ref_name }}"
+              echo "=================================================="
+      
+      # Move the original job call to a separate job or add it as another step
+   
+  build_scan_push_deploy_stage:
+    if: ${{ inputs.environment == 'stage' && inputs.action != 'kill' }}
+    needs: [ set_vars,normalize_vars, update_chartis_file ]
+    uses: GapInc-AIML/common_workflows/.github/workflows/build_scan_push_deployv2.yml@v1.0.0
+    with:
+        env: ${{ inputs.environment }}
+        image-name:  ${{ needs.normalize_vars.outputs.project-name }}
+        chartis-location: aks_resources/chartis/deploy.yml
+        docker-context: .
+        dockerfile-location: aks_resources/Dockerfile
+        ignore-existing-image-error: true
+        service-account-name: s-pt-entanaly
+        token-name: S_PT_ENTANALY_TOKEN
+        promote-to-prod: false
+        image-tag: ${{ needs.set_vars.outputs.short_sha }}
+        branch: donotuse
+        team: pt-aiml-${{ needs.set_vars.outputs.team }}
+    secrets: inherit
+                
+ 
+  build_scan_push_deploy_prod:
+    if: ${{ inputs.environment == 'prod' && inputs.action != 'kill' }}
+    needs: [ set_vars,normalize_vars, update_chartis_file ]
+    uses: GapInc-AIML/common_workflows/.github/workflows/build_scan_push_deployv2.yml@v1.0.0
+    with:
+        env: ${{ inputs.environment }}
+        image-name: ${{ needs.normalize_vars.outputs.project-name }}
+        chartis-location: aks_resources/chartis/deploy.yml
+        docker-context: .
+        dockerfile-location: aks_resources/Dockerfile
+        service-account-name: s-pt-entanaly
+        sonarqube-project-key: gcp_demo_project_key
+        token-name: S_PT_ENTANALY_TOKEN
+        promote-to-prod: true
+        create-pre-approved-change: true
+        ignore-existing-image-error: true
+        team: pt-aiml-${{ needs.set_vars.outputs.team }}
+        branch: donotuse
+        image-tag: ${{ needs.set_vars.outputs.short_sha }}
+    secrets: inherit
+  
+  
+  check_aks_resources_for_kill:
+    if: ${{ inputs.action == 'kill' }}
+    needs: [normalize_vars]
+    runs-on: [self-hosted]
+    outputs:
+      has_aks: ${{ steps.check.outputs.has_aks }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for aks_resources folder
+        id: check
+        run: |
+          if find . -name "aks_resources" | grep -q .; then
+            echo "has_aks=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_aks=false" >> $GITHUB_OUTPUT
+          fi
+  
+  update_chartis_file_for_kill: # make it project name
+    if: | 
+      needs.check_aks_resources_for_kill.outputs.has_aks == 'true'
+    needs: [normalize_vars,set_vars,check_aks_resources_for_kill]
+    runs-on: [self-hosted]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Update chartis file with the appname, tag and docker image
+        env:
+          ARTIFACTORY_USERNAME: ${{ secrets.JFROG_USERNAME }}
+          ARTIFACTORY_PASSWORD: ${{ secrets.JFROG_PASSWORD }}
+          PROJECT_NAME: ${{ needs.normalize_vars.outputs.project-name }}
+          BRANCH_NAME: ${{ needs.set_vars.outputs.branch_name }}
+          SHORT_SHA: ${{ needs.set_vars.outputs.short_sha }}
+          ACTION: ${{ needs.normalize_vars.outputs.action }}
+        run: |
+
+          cat <<EOF > dynamic.yml
+            default:
+              appName: ${PROJECT_NAME}-${{ needs.normalize_vars.outputs.branch-name }}
+              environment:  ${{ inputs.environment }}
+              kubernetes:
+                dockerImageTag: ${SHORT_SHA}
+                dockerImage: ${PROJECT_NAME}
+              environmentVariables:
+                PACKAGE_NAME: ${PROJECT_NAME}
+                TEAM: ${{ needs.set_vars.outputs.team }}
+                BRANCH_NAME: ${BRANCH_NAME}
+                ENVIRONMENT: ${{ inputs.environment }}
+          EOF
+        
+          pip install 'deploykit' --extra-index-url https://${ARTIFACTORY_USERNAME}:${ARTIFACTORY_PASSWORD}@gapinc.jfrog.io/artifactory/api/pypi/enterprise-mlops-pypi-prod/simple -v --no-input
+          python -m deploykit.aks_deployment.chartis_generator aks-deployment \
+            -s ${{ needs.normalize_vars.outputs.action }} \
+            -e ${{ inputs.environment }} \
+            --configurations "aks_resources/chartis/deploy.yml,aks_resources/chartis/variables.yml,dynamic.yml" \
+            -o "aks_resources/chartis/deploy.yml"
+
+      - name: Commit and push chartis file changes
+        env:
+          branch: ${{ needs.normalize_vars.outputs.branch-name }}
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add aks_resources/chartis/
+          git commit -m "Update chartis file with app: ${{ needs.normalize_vars.outputs.project-name }}-${{ needs.normalize_vars.outputs.branch-name }}, tag: ${{ needs.set_vars.outputs.release-tag }}" || exit 0
+          git push --force origin HEAD:donotuse
+
+
+  destroy-app:
+    if: | 
+      github.event_name == 'workflow_dispatch' && inputs.action == 'kill'
+    needs: [ update_chartis_file_for_kill ]
+    uses: continuous-delivery-platform/chartis-deploy/.github/workflows/chartis-deploy.yml@v1
+    with:
+      chartis-file: aks_resources/chartis/deploy.yml
+      branch: donotuse
+    secrets: inherit

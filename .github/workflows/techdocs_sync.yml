@@ -1,0 +1,17 @@
+name: Publish documentation to AIML TechDocs
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - mkdocs.yaml  # we are following yaml extension make sure you have the same
+      - mkdocs.yml
+      - docs/**
+
+jobs:
+  sync-techdocs:
+    uses: GapInc-AIML/common_workflows/.github/workflows/techdocs_sync.yml@v1.0.0
+    with:
+      enable-sync-aiml-techdocs: false      # By default it will be false add true to sync to developer portal
+    secrets: inherit

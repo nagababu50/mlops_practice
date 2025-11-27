@@ -1,0 +1,25 @@
+job_configs: &job_configs
+  email_notifications: ${var.job_configs.email_notifications}
+  notification_settings: ${var.job_configs.notification_settings}
+  git_source: ${var.git_source}
+  permissions: ${var.job_configs.permissions}
+
+resources:
+  jobs:
+    gcp_demo:
+      timeout_seconds: 10800 #Post 3hrs the job will abort with timeout error
+      schedule:
+        quartz_cron_expression: 43 50 15 15 * ?
+        timezone_id: UTC
+        pause_status: ${var.pause_status}
+      name: ${var.project_name} / ${var.git_branch}
+
+      # Use the pre-defined list of tasks
+      tasks: ${var.tasks.workflow_tasks}
+
+      job_clusters:
+        - job_cluster_key: ${var.project_name}_cluster
+          new_cluster: ${var.cluster_configs.compute_cluster_config}
+      <<: *job_configs
+
+

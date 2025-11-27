@@ -1,0 +1,75 @@
+# ===========================
+# Poe commands
+# this file describes poe commands that are leveraged
+# by the platform. Do not modify these commands 
+# ===========================
+
+[tasks.setup]
+help = "Create virtual environment and install dependencies"
+cmd = "uv sync --all-extras"
+
+[tasks.autofix]
+help = "Check and try to fix format issues. Use --unsafe to enable unsafe fixes."
+shell = """
+    unsafe_fixes_flag=""
+    if [ "$unsafe" = "True" ]; then
+        echo "\\033[31mWARNING: Running with unsafe fixes\\033[0m"
+        unsafe_fixes_flag="--unsafe-fixes"
+        uv run -- autopep8 --in-place --recursive --aggressive gcp_demo
+        uv run -- autopep8 --in-place --recursive --aggressive tests
+    fi
+    uv run -- ruff check --fix $unsafe_fixes_flag gcp_demo tests
+    uv run -- ruff format gcp_demo tests
+"""
+args = [
+    {name = "unsafe", options = ["--unsafe"], help = "Enable unsafe fixes", default = false, type = "boolean"}
+]
+
+[tasks.format]
+help = "Validate format of the python code. Use autofix command to automatically fix the code"
+shell = """
+    uv run -- ruff check gcp_demo tests &&
+    uv run -- ruff format --check gcp_demo tests
+"""
+
+[tasks.lint]
+help = "Check for mypy annotations"
+shell = "uv run -- mypy --pretty gcp_demo"
+
+
+[tasks.test]
+help = "Run unit tests"
+shell = "uv run -- pytest --junitxml=unittests.xml --cov-report=term --cov-report=xml --cov=gcp_demo --cov-branch --cov-config=.coveragerc"
+
+
+[tasks.validate-asset-bundle]
+help = "Create and Validate databricks asset bundle is generated correctly"
+cwd = "./databricks_resources"
+shell = """
+    databricks bundle validate -t dev \
+        --var="git_branch=test" \
+        --var="init_script_path=/Volumes/mlops_gdp_stage/metastore/enterprisemlops/mlplatform/gcp_demo_dev/test/$ARTIFACT_FILENAME" \
+        --var="git_tag=0.0.4-rc1" \
+        --var="wheel_file_path=/Volumes/mlops_gdp_stage/metastore/enterprisemlops/mlplatform/gcp_demo_dev/test/gcp_demo-0.0.4rc1-py3-none-any.whl" \
+        --output json > /tmp/output.json &&    
+    uv run python -m mlkit.databricks.checks \
+        --filepath /tmp/output.json
+"""
+
+[tasks.docker_serve]
+help="Build and run the AKS using docker"
+shell = """
+    echo ${UV_INDEX_GAP_JFROG_PASSWORD} | docker login gapinc-docker-repo.jfrog.io -u ${UV_INDEX_GAP_JFROG_USERNAME} --password-stdin &&
+    docker build -t gcp_demo \
+        --build-arg ARTIFACTORY_USERNAME=${UV_INDEX_GAP_JFROG_USERNAME} \
+        --build-arg ARTIFACTORY_PASSWORD=${UV_INDEX_GAP_JFROG_PASSWORD} \
+        --no-cache \
+        -f aks_resources/Dockerfile . &&
+    docker run -i --env-file .env -p 8000:8000 gcp_demo
+"""
+
+[tasks.local_serve]
+help = "Run the AKS app locally"
+shell = """
+    UV_ENV_FILE=.env uv run -- uvicorn gcp_demo.aks.main:app --host 0.0.0.0 --port 8080
+"""

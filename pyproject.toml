@@ -1,0 +1,53 @@
+[project]
+name = "gcp_demo"
+version = "0.0.1"
+description = "gcp_demo"
+
+
+authors = [{ name = "GAP Inc" }]
+requires-python = ">=3.11,<3.13"
+readme = "README.md"
+dependencies = [
+    "loguru>=0.7.2,<0.8",
+    "pandas<2.2.0",
+    "pandera>=0.18.0,<0.19",
+    "numpy==1.26.4",
+    "click>=8.1.8",
+    "scikit-learn>=1.7.2",
+    "cloudpickle>=3.1.2",
+    "typer>=0.20.0",
+]
+
+[dependency-groups]
+
+
+aks = [
+    "newrelic>=10.12.0",
+    "uvicorn>=0.34.3",
+]
+
+dev = [
+    "ruff>=0.5.3,<0.6",
+    "pytest>=7.4.3,<8",
+    "faker>=22.6.0,<23",
+    "pandas-stubs>=2.1.4.231227,<3",
+    "types-pyyaml>=6.0.12.12,<7",
+    "mypy-extensions>=1.0.0,<2",
+    "types-pillow>=10.2.0.20240213,<11",
+    "types-requests<2.31.0",
+    "mypy>=1.9.0,<2",
+    "pytest-cov >=6.0.0",
+    "pytest-sugar >=1.0.0",
+    "poethepoet>=0.33.1",
+    "autopep8>=2.3.2",
+]
+
+pipeline = [
+    "google-cloud-aiplatform[prediction]>=1.128.0",
+    "kfp>=2.15.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+

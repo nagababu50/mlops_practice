@@ -1,0 +1,10 @@
+variables:
+  spark_version:
+    description: spark version
+    default: 16.4.x-cpu-ml-scala2.12
+  node_type_id: 
+    description: node type id
+    default: Standard_E8ads_v5
+  driver_node_type_id: 
+    description: driver node type include
+    default: Standard_E8ads_v5

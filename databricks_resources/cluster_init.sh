@@ -1,0 +1,4 @@
+# /databricks/python3/bin/pip install --upgrade pip
+# curl -u $ARTIFACTORY_USERNAME:$ARTIFACTORY_PASSWORD -o gcp_demo.whl "https://gapinc.jfrog.io/artifactory/api/pypi/$ARTIFACTORY_REPO/gcp_demo/$PKG_VERSION/gcp_demo-$PKG_VERSION-py3-none-any.whl"
+# /databricks/python3/bin/pip install --index-url "https://$ARTIFACTORY_USERNAME:$ARTIFACTORY_PASSWORD@gapinc.jfrog.io/artifactory/api/pypi/entanaly-prod/simple" -U ./gcp_demo.whl
+curl -u $ARTIFACTORY_USERNAME:$ARTIFACTORY_PASSWORD -o $init_script_path "https://gapinc.jfrog.io/artifactory/api/pypi/$ARTIFACTORY_REPO/gcp_demo/$PKG_VERSION/gcp_demo-$PKG_VERSION-py3-none-any.whl"

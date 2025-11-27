@@ -1,0 +1,70 @@
+
+# Minimum python version
+target-version = "py311" 
+line-length = 120
+indent-width = 4
+
+# Rules to enable.
+# A combination of common rule sets provides good coverage.
+[lint]
+select = [
+    "E", # E (pycodestyle errors)
+    "F", # F (Pyflakes)
+    "I", # I (isort) - for import sorting
+    "D", # D (pydocstyle) - for docstring conventions (often disabled or fine-tuned)
+    "W", # (pycodestyle warnings)
+    "N", # N (pep8-naming) - for naming conventions
+    "S", # S (bandit) - for security issues (a subset of bandit rules)
+]
+
+
+ignore = [
+    'D100', 'D104', 'D107', 'D200', 'D203', 'D205', 'D212', 'D415', 'D417', # Docstring rules often ignored in quick setups
+    "E501", # Handled by Black/formatter
+    "N802", "N803", "N806", # Naming conventions, particularly for pytest
+]
+
+# Exclude files or directories from linting.
+# Common exclusions include virtual environments, build directories, and dotfiles.
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+]
+
+[lint.per-file-ignores]
+"tests/*" = [
+    "S101",  # Ignore S101 (assert usage) in test files
+    "D101", # Missing docstring in public class
+    "D102", #Missing docstring in public method
+    "D103"
+]
+
+[lint.pydocstyle]
+convention = "google"
+
+[lint.isort]
+split-on-trailing-comma = false
+
+[format]
+preview = true
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+docstring-code-format = true

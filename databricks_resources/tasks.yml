@@ -1,0 +1,38 @@
+# Define individual tasks that can be referenced elsewhere
+train_task: &train_task
+  task_key: train
+  libraries: ${var.libraries}
+  job_cluster_key: ${var.project_name}_cluster
+  spark_python_task:
+    python_file: ${var.project_name}/tasks/train.py
+    source: GIT
+    parameters:
+    - --mae-threshold
+    - '1e8'
+  max_retries: 2
+  min_retry_interval_millis: 300000
+
+inference_task: &inference_task
+  task_key: batch_inference
+  libraries: ${var.libraries}
+  depends_on:
+    - task_key: train
+  job_cluster_key: ${var.project_name}_cluster
+  spark_python_task:
+    python_file: ${var.project_name}/tasks/batch_inference.py
+    source: GIT
+  max_retries: 2
+  min_retry_interval_millis: 300000
+
+# Define variables for use in the workflow
+variables:
+  tasks:
+    description: Task configurations for the workflow
+    type: complex
+    default:
+      # Define the complete task list for the workflow
+      workflow_tasks:
+        - <<: *train_task
+        - <<: *inference_task
+
+
