@@ -10,7 +10,7 @@ from gcp_demo.estimators import HousePredictionModel
 import typer
 
 
-def train(model_output: Path) -> None:
+def train(model_output: Path,eval_output: Path = None) -> None:
     """Train House Price Prediction Model
 
     Args:
@@ -26,7 +26,9 @@ def train(model_output: Path) -> None:
     # Step 2: Train Model
     df_train, df_eval = train_test_split(df, test_size=0.1)
     model = HousePredictionModel()
-    model.fit(df_train, df_train["SalePrice"])
+    # model.fit(df_train, df_train["SalePrice"])   #testing 
+
+    model.fit(df, df["SalePrice"])
 
     # FIXME: Evaluate model performance and
     # raise error if not good enough
@@ -37,6 +39,12 @@ def train(model_output: Path) -> None:
     # Save outputs for pipeline
     with open(model_output, "wb") as f:
         cloudpickle.dump(model, f)
+
+
+    # <<< ADDED — Save evaluation dataset if path is provided
+    if eval_output is not None:
+        logger.info(f"Saving evaluation dataset to {eval_output}")
+        df_eval.to_csv(eval_output, index=False)
 
 
 if __name__ == "__main__":

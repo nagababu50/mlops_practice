@@ -10,11 +10,11 @@ set -e
 
 
 # Extract config values from Python config
-REGION=$(/c/Users/PAVANKUMAR/AppData/Local/Programs/Python/Python313/python -c "from pipeline.config import REGION; print(REGION)")
-DOCKER_BASE=$(/c/Users/PAVANKUMAR/AppData/Local/Programs/Python/Python313/python -c "from pipeline.config import DOCKER_BASE; print(DOCKER_BASE)")
-VERSION=$(/c/Users/PAVANKUMAR/AppData/Local/Programs/Python/Python313/python -c "from pipeline.config import PACKAGE_VERSION; print(PACKAGE_VERSION)")
+REGION=$(python3 -c "from pipeline.config import REGION; print(REGION)")
+DOCKER_BASE=$(python3 -c "from pipeline.config import DOCKER_BASE; print(DOCKER_BASE)")
+VERSION=$(python3 -c "from pipeline.config import PACKAGE_VERSION; print(PACKAGE_VERSION)")
 echo ">>> Loading DOCKERS mapping from Python config..."
-DOCKER_LINES=$(/c/Users/PAVANKUMAR/AppData/Local/Programs/Python/Python313/python - <<'PY'
+DOCKER_LINES=$(python3 - <<'PY'
 import json
 from pipeline.config import DOCKERS
 for name, uri in DOCKERS.items():

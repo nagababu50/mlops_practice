@@ -20,11 +20,14 @@ WORKDIR /app
 
 # Copy dependency files and source
 COPY pyproject.toml /app/
+COPY uv.lock /app/
 COPY .python-version /app/
 COPY README.md /app/
-COPY uv.lock /app/
 
 # Copy the application into the container.
 COPY gcp_demo /app/gcp_demo/
 
-RUN uv sync --locked --no-dev 
+# RUN uv sync --locked --no-dev
+# RUN uv sync --locked --groups pipeline
+RUN uv sync --locked --all-groups --no-dev
+

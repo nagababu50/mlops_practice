@@ -38,6 +38,22 @@ class HousePredictionModel:
             pd.DataFrame: Features for the model
 
         """
+
+        # --- FIX: convert numerics that may come as strings ---
+        raw_x = raw_x.copy()
+    
+        # Convert expected numeric columns
+        for col in ["LotFrontage", "LotArea", "YearBuilt"]:
+            raw_x[col] = pd.to_numeric(raw_x[col], errors="coerce")
+
+        # Fill missing values
+        raw_x["LotFrontage"] = raw_x["LotFrontage"].fillna(self.mean_frontage)
+        raw_x["LotArea"] = raw_x["LotArea"].fillna(raw_x["LotArea"].median())
+        raw_x["YearBuilt"] = raw_x["YearBuilt"].fillna(raw_x["YearBuilt"].mode()[0])
+
+        # Convert SaleType to string (safe for LabelEncoder)
+        raw_x["SaleType"] = raw_x["SaleType"].astype(str)
+
         return pd.DataFrame({
             "LotFrontage": raw_x.LotFrontage.fillna(self.mean_frontage).values,
             "LotArea": np.log1p(raw_x.LotArea).values,
@@ -59,6 +75,10 @@ class HousePredictionModel:
             Self: Returns the same instance of the model
 
         """
+        # Convert before fitting as well
+        raw_x = raw_x.copy()
+        raw_x["SaleType"] = raw_x["SaleType"].astype(str)
+
         self.sale_type_encoder = LabelEncoder().fit(raw_x.SaleType)
         self.mean_frontage = raw_x.LotFrontage.mean()
         self.model = LinearRegression()
